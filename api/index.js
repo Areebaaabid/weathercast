@@ -87,7 +87,7 @@ const queryDB = async (query_text, params) => {
       encodeURIComponent(dbUrl.username) + ":" + encodeURIComponent(dbUrl.password)
     ).toString("base64");
 
-    const resp = await postJson(`https://${dbUrl.host}/sql`, { query: query_text, params: params || [] }, auth);
+    const resp = await postJson(`https://${dbUrl.hostname}/sql`, { query: query_text, params: params || [] }, auth);
 
     if (resp.status !== 200) {
       dbErrMsg = `HTTP ${resp.status}: ${typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body)}`;
