@@ -4,6 +4,6 @@
   "scripts": {
     "build": "cd client && npm run build",
     "dev": "cd client && npm run dev",
-    "postinstall": "cd client && npm install"
+    "postinstall": "npm install --prefix client && npm install --prefix server"
   }
 }
