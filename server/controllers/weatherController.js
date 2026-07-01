@@ -62,26 +62,29 @@ const getWeather = async (req, res) => {
   const aqi = aqiRes.data.current;
   const description = WEATHER_CODES[current.weather_code] || "Unknown";
 
-  // 3. Upsert into PostgreSQL
-  await Search.upsert({
-    city: name,
-    country,
-    latitude,
-    longitude,
-    temperature: Math.round(current.temperature_2m),
-    weatherCode: current.weather_code,
-    description,
-    searchedAt: new Date(),
-  });
+  // 3. Upsert into PostgreSQL (non-critical — skip on failure)
+  try {
+    await Search.upsert({
+      city: name,
+      country,
+      latitude,
+      longitude,
+      temperature: Math.round(current.temperature_2m),
+      weatherCode: current.weather_code,
+      description,
+      searchedAt: new Date(),
+    });
 
-  // 4. Trim to 20 most recent
-  const allSearches = await Search.findAll({ order: [["searchedAt", "DESC"]] });
-  if (allSearches.length > 20) {
-    const toDelete = allSearches.slice(20).map((s) => s.id);
-    await Search.destroy({ where: { id: toDelete } });
+    const allSearches = await Search.findAll({ order: [["searchedAt", "DESC"]] });
+    if (allSearches.length > 20) {
+      const toDelete = allSearches.slice(20).map((s) => s.id);
+      await Search.destroy({ where: { id: toDelete } });
+    }
+  } catch {
+    // DB unavailable — weather data still returned
   }
 
-  // 5. Send response
+  // 4. Send response
   res.json({
     location: { name, country, latitude, longitude, timezone },
     current: {

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { WeatherProvider, useWeather } from "./context/WeatherContext";
 import { useBackground } from "./hooks/useBackground";
+import ErrorBoundary from "./components/ErrorBoundary";
 import SearchBar from "./components/SearchBar";
 import CurrentWeather from "./components/CurrentWeather";
 import Forecast from "./components/Forecast";
@@ -58,9 +59,11 @@ const Dashboard = () => {
 };
 
 const App = () => (
-  <WeatherProvider>
-    <Dashboard />
-  </WeatherProvider>
+  <ErrorBoundary>
+    <WeatherProvider>
+      <Dashboard />
+    </WeatherProvider>
+  </ErrorBoundary>
 );
 
 export default App;
