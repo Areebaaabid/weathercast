@@ -81,11 +81,7 @@ const queryDB = async (text, params) => {
     } catch (e) {
       retries--;
       if (retries < 0) {
-        let info = {};
-        try { Object.getOwnPropertyNames(e).forEach(k => info[k] = String(e[k])); } catch {}
-        info.message = e.message;
-        info.code = e.code;
-        dbErrMsg = JSON.stringify(info);
+        dbErrMsg = e.message;
         dbStatus = "error";
         return null;
       }
@@ -115,13 +111,7 @@ module.exports = async (req, res) => {
   const url = req.url;
 
   if (url === "/api/health") {
-    return send(res, 200, {
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      database: process.env.DATABASE_URL ? "url set" : "url NOT set",
-      dbStatus,
-      dbError: dbErrMsg,
-    });
+    return send(res, 200, { status: "ok", timestamp: new Date().toISOString(), dbStatus });
   }
 
   if (url === "/api/history") {

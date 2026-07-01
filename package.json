@@ -7,7 +7,6 @@
     "postinstall": "cd client && npm install"
   },
   "dependencies": {
-    "@neondatabase/serverless": "0.9.3",
     "pg": "8.11.3"
   }
 }
