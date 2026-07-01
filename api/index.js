@@ -50,7 +50,7 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
-const fetchWithTimeout = (url, options, timeout = 8000) => {
+const fetchWithTimeout = (url, options, timeout = 25000) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
