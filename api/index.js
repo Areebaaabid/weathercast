@@ -70,7 +70,7 @@ const queryDB = async (text, params) => {
     return { rows: res.rows };
   } catch (e) {
     client = null;
-    dbErrMsg = e.message;
+    dbErrMsg = JSON.stringify({ message: e.message, code: e.code, name: e.name, stack: (e.stack || "").split("\n")[0] });
     dbStatus = "error";
     return null;
   }
