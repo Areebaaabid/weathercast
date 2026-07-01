@@ -130,5 +130,13 @@ module.exports = async (req, res) => {
     }
   }
 
+  if (url === "/api/history") {
+    return send(res, 200, req.method === "DELETE" ? { message: "History cleared" } : []);
+  }
+
+  if (/^\/api\/history\//.test(url) && req.method === "DELETE") {
+    return send(res, 200, { message: "Deleted successfully" });
+  }
+
   return send(res, 404, { error: "Route not found" });
 };
