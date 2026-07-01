@@ -13,13 +13,19 @@ const getPool = () => {
   return pool;
 };
 
+let dbErr;
 const queryDB = async (text, params) => {
   const p = getPool();
-  if (!p) return null;
+  if (!p) {
+    dbErr = "DATABASE_URL not set";
+    return null;
+  }
   try {
     const res = await p.query(text, params);
+    dbErr = null;
     return { rows: res.rows };
-  } catch {
+  } catch (e) {
+    dbErr = e.message;
     return null;
   }
 };
@@ -96,7 +102,12 @@ module.exports = async (req, res) => {
   const url = req.url;
 
   if (url === "/api/health") {
-    return send(res, 200, { status: "ok", timestamp: new Date().toISOString() });
+    return send(res, 200, {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      database: process.env.DATABASE_URL ? "url set" : "url NOT set",
+      dbError: dbErr,
+    });
   }
 
   if (url === "/api/history") {
