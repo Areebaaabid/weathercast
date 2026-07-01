@@ -1,5 +1,4 @@
 const https = require("https");
-const http = require("http");
 
 const fetchJson = (url) =>
   new Promise((resolve, reject) => {
@@ -11,6 +10,32 @@ const fetchJson = (url) =>
         catch { reject(new Error("Invalid JSON response")); }
       });
     }).on("error", reject);
+  });
+
+const postJson = (url, body, auth) =>
+  new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const opts = {
+      hostname: parsed.hostname,
+      port: 443,
+      path: parsed.pathname,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+    if (auth) opts.headers.Authorization = `Basic ${auth}`;
+    const req = https.request(opts, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode, body: data }); }
+      });
+    });
+    req.on("error", reject);
+    req.write(JSON.stringify(body));
+    req.end();
   });
 
 const WEATHER_CODES = {
@@ -50,12 +75,6 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
-const fetchWithTimeout = (url, options, timeout = 25000) => {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
-};
-
 let dbStatus = "not connected";
 let dbErrMsg = null;
 
@@ -68,29 +87,19 @@ const queryDB = async (query_text, params) => {
       encodeURIComponent(dbUrl.username) + ":" + encodeURIComponent(dbUrl.password)
     ).toString("base64");
 
-    const resp = await fetchWithTimeout(
-      `https://${dbUrl.host}/sql`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Basic ${auth}`,
-        },
-        body: JSON.stringify({ query: query_text, params: params || [] }),
-      }
-    );
+    const resp = await postJson(`https://${dbUrl.host}/sql`, { query: query_text, params: params || [] }, auth);
 
-    if (!resp.ok) {
-      dbErrMsg = `HTTP ${resp.status}: ${await resp.text().catch(() => "no body")}`;
+    if (resp.status !== 200) {
+      dbErrMsg = `HTTP ${resp.status}: ${typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body)}`;
       return null;
     }
 
-    const data = await resp.json();
     dbStatus = "connected";
     dbErrMsg = null;
-    return { rows: data.rows || data };
+    const body = resp.body;
+    return { rows: body.rows || (Array.isArray(body) ? body : []) };
   } catch (e) {
-    dbErrMsg = e.cause ? e.cause.message : e.message;
+    dbErrMsg = e.code ? `E: ${e.code} - ${e.message}` : e.message;
     dbStatus = "error";
     return null;
   }
