@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: weather_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    container_name: weather_server
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/weatherapp
+      - CLIENT_URL=http://localhost:5173
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  client:
+    build: ./client
+    container_name: weather_client
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
