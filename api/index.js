@@ -1,4 +1,5 @@
 const https = require("https");
+const { Client } = require("@neondatabase/serverless");
 
 const fetchJson = (url) =>
   new Promise((resolve, reject) => {
@@ -10,32 +11,6 @@ const fetchJson = (url) =>
         catch { reject(new Error("Invalid JSON response")); }
       });
     }).on("error", reject);
-  });
-
-const postJson = (url, body, auth) =>
-  new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const opts = {
-      hostname: parsed.hostname,
-      port: 443,
-      path: parsed.pathname,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    };
-    if (auth) opts.headers.Authorization = `Basic ${auth}`;
-    const req = https.request(opts, (res) => {
-      let data = "";
-      res.on("data", (c) => (data += c));
-      res.on("end", () => {
-        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
-        catch { resolve({ status: res.statusCode, body: data }); }
-      });
-    });
-    req.on("error", reject);
-    req.write(JSON.stringify(body));
-    req.end();
   });
 
 const WEATHER_CODES = {
@@ -78,28 +53,24 @@ const send = (res, status, data) => {
 let dbStatus = "not connected";
 let dbErrMsg = null;
 
-const queryDB = async (query_text, params) => {
+let client = null;
+const queryDB = async (text, params) => {
   const { DATABASE_URL } = process.env;
   if (!DATABASE_URL) { dbErrMsg = "DATABASE_URL not set"; return null; }
+
   try {
-    const dbUrl = new URL(DATABASE_URL);
-    const auth = Buffer.from(
-      encodeURIComponent(dbUrl.username) + ":" + encodeURIComponent(dbUrl.password)
-    ).toString("base64");
-
-    const resp = await postJson(`https://${dbUrl.hostname}/sql`, { query: query_text, params: params || [] }, auth);
-
-    if (resp.status !== 200) {
-      dbErrMsg = `HTTP ${resp.status}: ${typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body)}`;
-      return null;
+    if (!client) {
+      client = new Client({ connectionString: DATABASE_URL });
+      await client.connect();
     }
 
+    const res = await client.query(text, params);
     dbStatus = "connected";
     dbErrMsg = null;
-    const body = resp.body;
-    return { rows: body.rows || (Array.isArray(body) ? body : []) };
+    return { rows: res.rows };
   } catch (e) {
-    dbErrMsg = e.code ? `E: ${e.code} - ${e.message}` : e.message;
+    client = null;
+    dbErrMsg = e.message;
     dbStatus = "error";
     return null;
   }

@@ -6,5 +6,8 @@
     "dev": "cd client && npm run dev",
     "postinstall": "cd client && npm install"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@neondatabase/serverless": "0.9.3",
+    "pg": "8.11.3"
+  }
 }
