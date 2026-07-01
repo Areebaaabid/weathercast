@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/db");
+const { getSequelize } = require("../config/db");
 
-const Search = sequelize.define(
+const Search = getSequelize().define(
   "Search",
   {
     id: {
