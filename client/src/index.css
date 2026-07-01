@@ -435,5 +435,5 @@ body { font-family: 'Inter', sans-serif; min-height: 100vh; }
   .current-stats { grid-template-columns: repeat(2,1fr); }
   .grid-two      { grid-template-columns: 1fr; }
   .forecast-grid { grid-template-columns: repeat(3,1fr); }
-  .forecast-grid .forecast-card:nth-child(n+4) { display: none; }
+  .forecast-grid .forecast-card:nth-child(n+6) { display: none; }
 }
