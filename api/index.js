@@ -52,6 +52,57 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
+const queryDB = async (query, params) => {
+  const { DATABASE_URL } = process.env;
+  if (!DATABASE_URL) return null;
+  try {
+    const url = new URL(DATABASE_URL);
+    const auth = Buffer.from(`${url.username}:${url.password}`).toString("base64");
+    const body = JSON.stringify({ query, params: params || [] });
+    return new Promise((resolve) => {
+      const req = https.request(
+        `https://${url.host}/sql`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Basic ${auth}`,
+          },
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            try { resolve(JSON.parse(data)); }
+            catch { resolve(null); }
+          });
+        }
+      );
+      req.on("error", () => resolve(null));
+      req.write(body);
+      req.end();
+    });
+  } catch {
+    return null;
+  }
+};
+
+queryDB(
+  `CREATE TABLE IF NOT EXISTS searches (
+    id SERIAL PRIMARY KEY,
+    city VARCHAR(255) NOT NULL,
+    country VARCHAR(255),
+    latitude FLOAT,
+    longitude FLOAT,
+    temperature INTEGER,
+    "weatherCode" INTEGER,
+    description VARCHAR(255),
+    "searchedAt" TIMESTAMP DEFAULT NOW(),
+    "createdAt" TIMESTAMP DEFAULT NOW(),
+    "updatedAt" TIMESTAMP DEFAULT NOW()
+  )`
+).catch(() => {});
+
 module.exports = async (req, res) => {
   const url = req.url;
 
@@ -60,10 +111,20 @@ module.exports = async (req, res) => {
   }
 
   if (url === "/api/history") {
-    return send(res, 200, []);
+    if (req.method === "DELETE") {
+      await queryDB("DELETE FROM searches").catch(() => {});
+      return send(res, 200, { message: "History cleared" });
+    }
+    const rows = await queryDB(
+      `SELECT id, city, country, temperature, description, "weatherCode", "searchedAt"
+       FROM searches ORDER BY "searchedAt" DESC LIMIT 10`
+    );
+    return send(res, 200, (rows && rows.rows) || []);
   }
 
-  if (/^\/api\/history\//.test(url) && req.method === "DELETE") {
+  const historyDelete = url.match(/^\/api\/history\/(\d+)$/);
+  if (historyDelete && req.method === "DELETE") {
+    await queryDB("DELETE FROM searches WHERE id = $1", [parseInt(historyDelete[1])]).catch(() => {});
     return send(res, 200, { message: "Deleted successfully" });
   }
 
@@ -96,6 +157,12 @@ module.exports = async (req, res) => {
       const daily = weatherRes.daily;
       const aqi = aqiRes.current;
       const description = WEATHER_CODES[current.weather_code] || "Unknown";
+
+      queryDB(
+        `INSERT INTO searches (city, country, latitude, longitude, temperature, "weatherCode", description, "searchedAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NOW())`,
+        [name, country, latitude, longitude, Math.round(current.temperature_2m), current.weather_code, description]
+      ).catch(() => {});
 
       return send(res, 200, {
         location: { name, country, latitude, longitude, timezone },
