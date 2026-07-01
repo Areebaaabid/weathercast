@@ -1,29 +1,27 @@
 const https = require("https");
-const { Pool } = require("pg");
+const { neon } = require("@neondatabase/serverless");
 
-let pool;
-const getPool = () => {
-  if (!pool && process.env.DATABASE_URL) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 1,
-    });
+let sql;
+let dbErr;
+
+const getSql = () => {
+  if (!sql && process.env.DATABASE_URL) {
+    try {
+      sql = neon(process.env.DATABASE_URL, { mode: "http" });
+    } catch (e) {
+      dbErr = e.message;
+    }
   }
-  return pool;
+  return sql;
 };
 
-let dbErr;
-const queryDB = async (text, params) => {
-  const p = getPool();
-  if (!p) {
-    dbErr = "DATABASE_URL not set";
-    return null;
-  }
+const queryDB = async (query, params) => {
+  const s = getSql();
+  if (!s) return null;
   try {
-    const res = await p.query(text, params);
+    const rows = await s(query, ...(params || []));
     dbErr = null;
-    return { rows: res.rows };
+    return { rows };
   } catch (e) {
     dbErr = e.message;
     return null;
