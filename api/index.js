@@ -1,5 +1,5 @@
 const https = require("https");
-const { Client } = require("@neondatabase/serverless");
+const { Pool } = require("pg");
 
 const fetchJson = (url) =>
   new Promise((resolve, reject) => {
@@ -52,28 +52,47 @@ const send = (res, status, data) => {
 
 let dbStatus = "not connected";
 let dbErrMsg = null;
+let pool = null;
 
-let client = null;
-const queryDB = async (text, params) => {
-  const { DATABASE_URL } = process.env;
-  if (!DATABASE_URL) { dbErrMsg = "DATABASE_URL not set"; return null; }
-
-  try {
-    if (!client) {
-      client = new Client({ connectionString: DATABASE_URL });
-      await client.connect();
-    }
-
-    const res = await client.query(text, params);
-    dbStatus = "connected";
-    dbErrMsg = null;
-    return { rows: res.rows };
-  } catch (e) {
-    client = null;
-    dbErrMsg = JSON.stringify({ message: e.message, code: e.code, name: e.name, stack: (e.stack || "").split("\n")[0] });
-    dbStatus = "error";
-    return null;
+const getPool = () => {
+  if (!pool && process.env.DATABASE_URL) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 1,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+    });
   }
+  return pool;
+};
+
+const queryDB = async (text, params) => {
+  const p = getPool();
+  if (!p) { dbErrMsg = "DATABASE_URL not set"; return null; }
+
+  let retries = 2;
+  while (retries >= 0) {
+    try {
+      const res = await p.query(text, params);
+      dbStatus = "connected";
+      dbErrMsg = null;
+      return { rows: res.rows };
+    } catch (e) {
+      retries--;
+      if (retries < 0) {
+        let info = {};
+        try { Object.getOwnPropertyNames(e).forEach(k => info[k] = String(e[k])); } catch {}
+        info.message = e.message;
+        info.code = e.code;
+        dbErrMsg = JSON.stringify(info);
+        dbStatus = "error";
+        return null;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  return null;
 };
 
 queryDB(
