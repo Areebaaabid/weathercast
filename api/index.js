@@ -1,32 +1,5 @@
 const https = require("https");
-const { neon } = require("@neondatabase/serverless");
-
-let sql;
-let dbErr;
-
-const getSql = () => {
-  if (!sql && process.env.DATABASE_URL) {
-    try {
-      sql = neon(process.env.DATABASE_URL, { mode: "http" });
-    } catch (e) {
-      dbErr = e.message;
-    }
-  }
-  return sql;
-};
-
-const queryDB = async (query, params) => {
-  const s = getSql();
-  if (!s) return null;
-  try {
-    const rows = await s(query, ...(params || []));
-    dbErr = null;
-    return { rows };
-  } catch (e) {
-    dbErr = e.message;
-    return null;
-  }
-};
+const http = require("http");
 
 const fetchJson = (url) =>
   new Promise((resolve, reject) => {
@@ -34,11 +7,8 @@ const fetchJson = (url) =>
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch {
-          reject(new Error("Invalid JSON response"));
-        }
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error("Invalid JSON response")); }
       });
     }).on("error", reject);
   });
@@ -80,6 +50,52 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
+const fetchWithTimeout = (url, options, timeout = 8000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+};
+
+let dbStatus = "not connected";
+let dbErrMsg = null;
+
+const queryDB = async (query_text, params) => {
+  const { DATABASE_URL } = process.env;
+  if (!DATABASE_URL) { dbErrMsg = "DATABASE_URL not set"; return null; }
+  try {
+    const dbUrl = new URL(DATABASE_URL);
+    const auth = Buffer.from(
+      encodeURIComponent(dbUrl.username) + ":" + encodeURIComponent(dbUrl.password)
+    ).toString("base64");
+
+    const resp = await fetchWithTimeout(
+      `https://${dbUrl.host}/sql`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${auth}`,
+        },
+        body: JSON.stringify({ query: query_text, params: params || [] }),
+      }
+    );
+
+    if (!resp.ok) {
+      dbErrMsg = `HTTP ${resp.status}: ${await resp.text().catch(() => "no body")}`;
+      return null;
+    }
+
+    const data = await resp.json();
+    dbStatus = "connected";
+    dbErrMsg = null;
+    return { rows: data.rows || data };
+  } catch (e) {
+    dbErrMsg = e.cause ? e.cause.message : e.message;
+    dbStatus = "error";
+    return null;
+  }
+};
+
 queryDB(
   `CREATE TABLE IF NOT EXISTS searches (
     id SERIAL PRIMARY KEY,
@@ -104,7 +120,8 @@ module.exports = async (req, res) => {
       status: "ok",
       timestamp: new Date().toISOString(),
       database: process.env.DATABASE_URL ? "url set" : "url NOT set",
-      dbError: dbErr,
+      dbStatus,
+      dbError: dbErrMsg,
     });
   }
 
