@@ -1,28 +1,15 @@
-let dbReady = false;
-let lastDbAttempt = 0;
-const DB_RETRY_MS = 30_000;
-let app;
-
 module.exports = async (req, res) => {
-  if (!app) {
+  try {
+    const app = require("../server/server");
+    const { connectDB } = require("../server/config/db");
     try {
-      app = require("../server/server");
-    } catch (err) {
-      console.error("Server load error:", err.message);
-      return res.status(500).json({ error: "Server unavailable" });
-    }
-  }
-
-  if (!dbReady && Date.now() - lastDbAttempt > DB_RETRY_MS) {
-    lastDbAttempt = Date.now();
-    try {
-      const { connectDB } = require("../server/config/db");
       await connectDB();
-      dbReady = true;
-    } catch (err) {
-      console.error("DB unavailable:", err.message);
+    } catch (e) {
+      console.error("DB unavailable:", e.message);
     }
+    app(req, res);
+  } catch (err) {
+    res.setHeader("Content-Type", "application/json");
+    res.status(500).end(JSON.stringify({ error: err.message || "Server error" }));
   }
-
-  app(req, res);
 };
