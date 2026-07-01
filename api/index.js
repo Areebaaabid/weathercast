@@ -1,4 +1,28 @@
 const https = require("https");
+const { Pool } = require("pg");
+
+let pool;
+const getPool = () => {
+  if (!pool && process.env.DATABASE_URL) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 1,
+    });
+  }
+  return pool;
+};
+
+const queryDB = async (text, params) => {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    const res = await p.query(text, params);
+    return { rows: res.rows };
+  } catch {
+    return null;
+  }
+};
 
 const fetchJson = (url) =>
   new Promise((resolve, reject) => {
@@ -52,41 +76,6 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
-const queryDB = async (query, params) => {
-  const { DATABASE_URL } = process.env;
-  if (!DATABASE_URL) return null;
-  try {
-    const url = new URL(DATABASE_URL);
-    const auth = Buffer.from(`${url.username}:${url.password}`).toString("base64");
-    const body = JSON.stringify({ query, params: params || [] });
-    return new Promise((resolve) => {
-      const req = https.request(
-        `https://${url.host}/sql`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic ${auth}`,
-          },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => {
-            try { resolve(JSON.parse(data)); }
-            catch { resolve(null); }
-          });
-        }
-      );
-      req.on("error", () => resolve(null));
-      req.write(body);
-      req.end();
-    });
-  } catch {
-    return null;
-  }
-};
-
 queryDB(
   `CREATE TABLE IF NOT EXISTS searches (
     id SERIAL PRIMARY KEY,
@@ -115,11 +104,11 @@ module.exports = async (req, res) => {
       await queryDB("DELETE FROM searches").catch(() => {});
       return send(res, 200, { message: "History cleared" });
     }
-    const rows = await queryDB(
+    const result = await queryDB(
       `SELECT id, city, country, temperature, description, "weatherCode", "searchedAt"
        FROM searches ORDER BY "searchedAt" DESC LIMIT 10`
     );
-    return send(res, 200, (rows && rows.rows) || []);
+    return send(res, 200, (result && result.rows) || []);
   }
 
   const historyDelete = url.match(/^\/api\/history\/(\d+)$/);
