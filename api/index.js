@@ -1,24 +1,21 @@
 let app;
-let dbReady = false;
 
-module.exports = async (req, res) => {
+const loadApp = () => {
   if (!app) {
-    try {
-      app = require("../server/server");
-    } catch (err) {
-      return res.status(500).json({ error: "Server unavailable" });
-    }
+    app = require("../server/server");
+    const { connectDB } = require("../server/config/db");
+    connectDB()
+      .then(() => console.log("DB connected"))
+      .catch((err) => console.error("DB unavailable:", err.message));
   }
+  return app;
+};
 
-  if (!dbReady) {
-    try {
-      const { connectDB } = require("../server/config/db");
-      await connectDB();
-      dbReady = true;
-    } catch (err) {
-      console.error("DB unavailable:", err.message);
-    }
+module.exports = (req, res) => {
+  try {
+    loadApp()(req, res);
+  } catch (err) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err.message || "Server error" }));
   }
-
-  app(req, res);
 };
